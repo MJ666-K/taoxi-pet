@@ -1,0 +1,4 @@
+flat 2D sticker, paper cutout, rigid whole-body scaling, sliding, floating without feet contact,
+camera zoom, camera pan, camera shake, cropped limbs, out of frame, text, watermark, logo,
+realistic photo, dark background, room, floor, shadow under feet, green spill on hair or hat,
+different face, different outfit, different hair color, elongated legs, adult proportions
