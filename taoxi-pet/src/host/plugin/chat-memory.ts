@@ -312,9 +312,9 @@ export function createChatMemory(deps: ChatMemoryInput) {
     petId: string,
     text: string,
     image?: PetImageRef,
-    options?: { voice?: boolean },
+    options?: { voice?: boolean; actions?: readonly string[] },
   ): Promise<
-    | { ok: true; text: string; image?: string }
+    | { ok: true; text: string; image?: string; action?: string }
     | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet'; message?: string }
   > =>
     withMemoryLock(async () => {
@@ -332,7 +332,10 @@ export function createChatMemory(deps: ChatMemoryInput) {
           ? limitPool(readMemePool(found.conf.memes, memeDirsFor(found.entry)), Number(found.conf.chatImageLimit))
           : [];
       // 动作名单：开关开启才取（关掉 = 不注入也不解析）；名单本身为空（没配 categories）同样等于关闭。
-      const actions = found.conf.chatAnimationEnabled === true ? chatActionNames(found.conf.animations) : [];
+      const ownActions = found.conf.chatAnimationEnabled === true ? chatActionNames(found.conf.animations) : [];
+      const callerActions = (options?.actions ?? []).filter((name) => typeof name === 'string' && name !== '');
+      const actions = callerActions.length > 0 ? callerActions : ownActions;
+      const playOnPet = callerActions.length === 0;
       const mem = await readMemory();
       // 坏结构（数组/标量）按空桶重建；messages 不是数组的条目按新会话处理，避免 push 到坏对象上崩溃
       const bucket =
@@ -398,7 +401,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
         ...(generated.image !== undefined ? { image: generated.image } : {}),
       });
       // 动作先写：与 POST /anim 同一条写回链路（记录 + anim 叶子），渲染端据此播放并回报执。
-      if (generated.action !== undefined) {
+      if (playOnPet && generated.action !== undefined) {
         const record = playback.create(petId, generated.action);
         state.writePet(petId, 'anim', { name: generated.action, playbackId: record.playbackId });
       }
@@ -418,7 +421,12 @@ export function createChatMemory(deps: ChatMemoryInput) {
         });
       }
       // 同一份文本随返回值带出（叶子照写，不是二选一）
-      return { ok: true as const, text: generated.text, ...(generated.image ? { image: generated.image } : {}) };
+      return {
+        ok: true as const,
+        text: generated.text,
+        ...(generated.image ? { image: generated.image } : {}),
+        ...(generated.action ? { action: generated.action } : {}),
+      };
     });
 
   /** 删除某只宠物的对话记忆：`ts` 缺省 = 清空全部，给了 ts = 只删命中的轮（一轮两条共享 ts，成对删）。

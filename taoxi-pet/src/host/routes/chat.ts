@@ -130,7 +130,10 @@ async function postChat(deps: PetRouteDeps, petId: string, body: string | undefi
   const admitted = await admitImage(deps, parsed.attachment);
   if (!admitted.ok) return admitted.res;
   // voice:false = 调用方自己念（直播页），桌宠不要再把同一句说一遍
-  return okResult(await deps.chatWithPet(petId, text, admitted.ref, { voice: parsed.voice !== false }));
+  const actions = Array.isArray(parsed.actions)
+    ? parsed.actions.filter((name): name is string => typeof name === 'string' && name.trim() !== '').slice(0, 40)
+    : undefined;
+  return okResult(await deps.chatWithPet(petId, text, admitted.ref, { voice: parsed.voice !== false, actions }));
 }
 
 /**
