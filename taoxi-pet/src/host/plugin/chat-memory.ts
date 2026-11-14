@@ -312,6 +312,7 @@ export function createChatMemory(deps: ChatMemoryInput) {
     petId: string,
     text: string,
     image?: PetImageRef,
+    options?: { voice?: boolean },
   ): Promise<
     | { ok: true; text: string; image?: string }
     | { ok: false; reason: 'provider-missing' | 'generate-error' | 'unknown-pet'; message?: string }
@@ -404,7 +405,8 @@ export function createChatMemory(deps: ChatMemoryInput) {
       // 回复写进 S（与碎碎念同一个叶子：前端本来就是同一条展示链路）。
       // 该由哪一端念按这只宠物的 display 推：对话请求带的是 surface=any，本来就没有具体的一端可用。
       // 对话回复归「手动播报」：用户发了消息才有的这一句，由 voiceEnabled 决定念不念。
-      const replyVoiceTo = cfg.main?.voiceEnabled === true ? voiceTargetFor(found.pet) : undefined;
+      const replyVoiceTo =
+        options?.voice === false ? undefined : cfg.main?.voiceEnabled === true ? voiceTargetFor(found.pet) : undefined;
       // 只有动作没有正文（模型只写了标记）→ 不写 say，避免弹一个空气泡。
       if (generated.text !== '') {
         state.writePet(petId, 'say', {

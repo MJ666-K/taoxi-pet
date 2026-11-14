@@ -3021,7 +3021,7 @@ async function postChat(deps, petId, body) {
 	if (text.length > 2e3) return failResult("bad-request", "消息过长（限 2000 字）");
 	const admitted = await admitImage(deps, parsed.attachment);
 	if (!admitted.ok) return admitted.res;
-	return okResult(await deps.chatWithPet(petId, text, admitted.ref));
+	return okResult(await deps.chatWithPet(petId, text, admitted.ref, { voice: parsed.voice !== false }));
 }
 /**
 * 校验图片入参并交给宿主附件服务落盘。
@@ -8089,7 +8089,7 @@ function createChatMemory(deps) {
 	};
 	/** 与某只宠物对话：截取最近记忆 → 生成回复 → 写入记忆 → 写进 S 的 pets.<id>.say。
 	*  供 POST /chat 与 /chat 命令共用（锁内读写，防两端交错写盘）；成功带回回复文本。 */
-	const chatWithPet = async (petId, text, image) => withMemoryLock(async () => {
+	const chatWithPet = async (petId, text, image, options) => withMemoryLock(async () => {
 		const cfg = readAllConfig(configPaths);
 		const found = findPetInstance(cfg, petId);
 		if (!found) return {
@@ -8157,7 +8157,7 @@ function createChatMemory(deps) {
 				playbackId: record.playbackId
 			});
 		}
-		const replyVoiceTo = cfg.main?.voiceEnabled === true ? voiceTargetFor(found.pet) : void 0;
+		const replyVoiceTo = options?.voice === false ? void 0 : cfg.main?.voiceEnabled === true ? voiceTargetFor(found.pet) : void 0;
 		if (generated.text !== "") state.writePet(petId, "say", {
 			text: generated.text,
 			...generated.image ? { image: generated.image } : {},

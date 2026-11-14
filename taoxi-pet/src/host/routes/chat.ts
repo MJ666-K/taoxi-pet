@@ -129,7 +129,8 @@ async function postChat(deps: PetRouteDeps, petId: string, body: string | undefi
   // 图片缺省时直接返回空结论，下面的调用与加入图片前逐字一致（回归测试钉的就是这条）
   const admitted = await admitImage(deps, parsed.attachment);
   if (!admitted.ok) return admitted.res;
-  return okResult(await deps.chatWithPet(petId, text, admitted.ref));
+  // voice:false = 调用方自己念（直播页），桌宠不要再把同一句说一遍
+  return okResult(await deps.chatWithPet(petId, text, admitted.ref, { voice: parsed.voice !== false }));
 }
 
 /**
