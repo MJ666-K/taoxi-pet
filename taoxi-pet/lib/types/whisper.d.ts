@@ -15,6 +15,7 @@ export type WhisperGenerateResult = {
     ok: true;
     text: string;
     image?: string;
+    action?: string;
 } | {
     ok: false;
     reason: 'provider-missing' | 'generate-error';
@@ -26,11 +27,13 @@ export declare const SLEEP_TALK_INSTRUCTION = "\u4F60\u6B63\u5728\u7761\u89C9\uF
 export interface WhisperRequest {
     /** 人设 system 提示词（whisperPrompt）。 */
     system: string;
-    /** 配图（开启配图时传入；缺省 = 纯文本碎碎念）。生成成功时原样带回，客户端据此展示图片。 */
+    /** 配图（调用方点名时传入）。生成成功时原样带回，客户端据此展示图片。 */
     meme?: {
         name: string;
         desc: string;
     };
+    /** 可表演的动作名。非空时让模型在句尾标一个最贴合的动作，解析后带回，不写进正文。 */
+    actions?: readonly string[];
     /** 条目单独指定的模型（whisperModel）；缺省 / 留空 = 只用当前对话的模型。 */
     preferred?: ModelRef;
     /** 功能指令（梦话传 SLEEP_TALK_INSTRUCTION）；缺省 = 碎碎念指令。 */

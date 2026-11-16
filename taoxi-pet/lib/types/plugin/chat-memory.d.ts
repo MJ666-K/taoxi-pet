@@ -28,10 +28,14 @@ export declare function createChatMemory(deps: ChatMemoryInput): {
         message?: string;
     }>;
     publishSleepTalk: (petId: string) => Promise<boolean>;
-    chatWithPet: (petId: string, text: string, image?: PetImageRef) => Promise<{
+    chatWithPet: (petId: string, text: string, image?: PetImageRef, options?: {
+        voice?: boolean;
+        actions?: readonly string[];
+    }) => Promise<{
         ok: true;
         text: string;
         image?: string;
+        action?: string;
     } | {
         ok: false;
         reason: "provider-missing" | "generate-error" | "unknown-pet";

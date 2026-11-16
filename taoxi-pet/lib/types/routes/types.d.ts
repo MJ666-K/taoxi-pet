@@ -137,8 +137,12 @@ export interface PetRouteDeps {
     readonly memoryPath: string;
     /** 单次对话保留的轮数。 */
     readonly memoryRounds: (conf: Record<string, unknown>) => number;
-    /** 与本机宠物对话；image 缺省 = 纯文本，数据路径与加入图片前一致。 */
-    readonly chatWithPet: (petId: string, text: string, image?: PetImageRef) => Promise<GeneratedReply>;
+    /** 与本机宠物对话；image 缺省 = 纯文本。voice 缺省 true；false = 只回文本，不让桌宠再念一遍。
+     *  actions 是调用方给定的动作名单（直播页自己播）；缺省则用这只宠物自己的动作分类。 */
+    readonly chatWithPet: (petId: string, text: string, image?: PetImageRef, options?: {
+        voice?: boolean;
+        actions?: readonly string[];
+    }) => Promise<GeneratedReply>;
     /** 删除该宠物的对话记忆：ts 缺省 = 清空全部，否则只删命中的轮（成对）。 */
     readonly deleteHistory: (petId: string, ts?: readonly number[]) => Promise<{
         ok: true;

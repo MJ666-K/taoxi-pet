@@ -3505,7 +3505,11 @@ async function postChat(deps, petId, body) {
 	if (text.length > 2e3) return failResult("bad-request", "消息过长（限 2000 字）");
 	const admitted = await admitImage(deps, parsed.attachment);
 	if (!admitted.ok) return admitted.res;
-	return okResult(await deps.chatWithPet(petId, text, admitted.ref, { voice: parsed.voice !== false }));
+	const actions = Array.isArray(parsed.actions) ? parsed.actions.filter((name) => typeof name === "string" && name.trim() !== "").slice(0, 40) : void 0;
+	return okResult(await deps.chatWithPet(petId, text, admitted.ref, {
+		voice: parsed.voice !== false,
+		actions
+	}));
 }
 /**
 * 校验图片入参并交给宿主附件服务落盘。
@@ -8151,7 +8155,10 @@ function createChatMemory(deps) {
 		};
 		const rounds = memoryRounds(found.conf);
 		const pool = found.conf.chatImageEnabled === true ? limitPool(readMemePool(found.conf.memes, memeDirsFor(found.entry)), Number(found.conf.chatImageLimit)) : [];
-		const actions = found.conf.chatAnimationEnabled === true ? chatActionNames(found.conf.animations) : [];
+		const ownActions = found.conf.chatAnimationEnabled === true ? chatActionNames(found.conf.animations) : [];
+		const callerActions = (options?.actions ?? []).filter((name) => typeof name === "string" && name !== "");
+		const actions = callerActions.length > 0 ? callerActions : ownActions;
+		const playOnPet = callerActions.length === 0;
 		const mem = await readMemory();
 		const bucket = mem[found.entry] && typeof mem[found.entry] === "object" && !Array.isArray(mem[found.entry]) ? mem[found.entry] : mem[found.entry] = {};
 		const existing = bucket[petId];
@@ -8202,7 +8209,7 @@ function createChatMemory(deps) {
 			...generated.action !== void 0 ? { action: generated.action } : {},
 			...generated.image !== void 0 ? { image: generated.image } : {}
 		});
-		if (generated.action !== void 0) {
+		if (playOnPet && generated.action !== void 0) {
 			const record = playback.create(petId, generated.action);
 			state$1.writePet(petId, "anim", {
 				name: generated.action,
@@ -8219,7 +8226,8 @@ function createChatMemory(deps) {
 		return {
 			ok: true,
 			text: generated.text,
-			...generated.image ? { image: generated.image } : {}
+			...generated.image ? { image: generated.image } : {},
+			...generated.action ? { action: generated.action } : {}
 		};
 	});
 	/** 删除某只宠物的对话记忆：`ts` 缺省 = 清空全部，给了 ts = 只删命中的轮（一轮两条共享 ts，成对删）。
