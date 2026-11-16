@@ -43,10 +43,15 @@ electronVersion: 43.3.0
 # electronDist 由 scripts/dist.mjs 经 `--config.electronDist=<本机解压目录>` 传入：
 # 这个字段不做 ${env.*} 宏展开（实测会原样当成路径），所以不能写死在 YAML 里。
 
-# 只出「解包目录」一种形态：分发时把 win-unpacked 整个压成 zip 即可（绿色版）。
-# 不做 portable（每次启动自解压，慢）也不做 nsis（安装包对自用场景没有增量价值）——
-# 真要回归安装包，把 target 改回 [nsis] 并补回 nsis 段（向导/快捷方式/卸载登记）即可。
+# 只出单个 portable exe：双击时自解压到 %TEMP%，旁边不用带 dll / resources。
+# win-unpacked 仍会作为中间目录留下，分发时不要带它。
+# 不做 nsis 安装包：装完还是一目录文件，不符合「只拷一个 exe」。
 win:
   icon: assets/logo.png
+  requestedExecutionLevel: asInvoker
   target:
-    - dir
+    - portable
+
+portable:
+  artifactName: taoxi-pet.exe
+  unpackDirName: taoxi-pet
