@@ -59,3 +59,38 @@ test('only the local main renderer receives the capability, scoped to the API or
     assert.equal(send(url, ownFrame)['X-Taoxi-Pet-Token'], undefined);
   }
 });
+
+test('token still attaches when the file url only differs by encoding or drive-letter case', () => {
+  let listener: Parameters<DesktopSession['webRequest']['onBeforeSendHeaders']>[0] | undefined;
+  const rendererPath = 'C:\\Users\\李明杰\\AppData\\Local\\Temp\\taoxi pet\\resources\\app.asar\\runtime\\electron-helper\\index.html';
+  installDesktopAuth(
+    {
+      webRequest: {
+        onBeforeSendHeaders(fn) {
+          listener = fn;
+        },
+      },
+    },
+    'http://127.0.0.1:3080',
+    rendererPath,
+    'private-token',
+  );
+  const send = (frameUrl: string) => {
+    let result: Record<string, string> = {};
+    listener!(
+      {
+        url: 'http://127.0.0.1:3080/taoxi-pet-7340/config',
+        frame: { url: frameUrl, parent: null },
+        requestHeaders: {},
+      },
+      (response) => {
+        result = response.requestHeaders;
+      },
+    );
+    return result['X-Taoxi-Pet-Token'];
+  };
+  const encoded = pathToFileURL(rendererPath).href;
+  assert.equal(send(encoded + '?petIndex=0'), 'private-token');
+  assert.equal(send(encoded.replace('/C:/', '/c:/')), 'private-token');
+  assert.equal(send(encoded.replace('index.html', 'other.html')), undefined);
+});

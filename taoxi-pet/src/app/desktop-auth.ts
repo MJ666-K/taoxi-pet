@@ -7,7 +7,9 @@
  * @module taoxi-pet/src/app/desktop-auth
  */
 
-import { pathToFileURL } from 'node:url';
+import { realpathSync } from 'node:fs';
+import { basename, dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ROUTE_SEGMENT } from '../shared/constants.ts';
 
 /** 一次出站请求的最小形态：只声明注入凭证需要读的字段。 */
@@ -30,9 +32,44 @@ export interface DesktopSession {
 }
 
 /**
+ * 把本地路径收成可比对的键。
+ *
+ * 打包后的 exe 会解压到每台电脑自己的临时目录。窗口地址和主进程路径经常只在盘符大小写、
+ * 百分号编码或 8.3 短名上不同；按 file 地址原文比对会漏加令牌，配置请求就被 403。
+ * asar 内部路径对 realpath 不可见，就落到最近一层真实目录上再把余下的相对路径接回去。
+ */
+function fileKey(filePath: string): string {
+  const resolved = resolve(filePath);
+  const tail: string[] = [];
+  let cursor = resolved;
+  let canonical = resolved;
+  while (true) {
+    try {
+      canonical = tail.reduceRight((dir, name) => resolve(dir, name), realpathSync.native(cursor));
+      break;
+    } catch {
+      const parent = dirname(cursor);
+      if (parent === cursor) break;
+      tail.push(basename(cursor));
+      cursor = parent;
+    }
+  }
+  return process.platform === 'win32' ? canonical.toLowerCase() : canonical;
+}
+
+/** 去掉查询串和片段后再还原成本地路径。fileURLToPath 拒绝带 search/hash 的地址。 */
+function pathFromFileUrl(href: string): string {
+  const url = new URL(href);
+  if (url.protocol !== 'file:') throw new Error('not a file url');
+  url.search = '';
+  url.hash = '';
+  return fileURLToPath(url);
+}
+
+/**
  * 为本机顶层 file 渲染端访问插件路由的请求附加访问令牌。
  *
- * 目标 origin、插件路由段、顶层 frame 与渲染页地址必须同时匹配，任一不满足都不加令牌；
+ * 目标 origin、插件路由段、顶层 frame 与渲染页真实路径必须同时匹配，任一不满足都不加令牌；
  * 先删同名请求头再按需写入，避免调用方自带的伪令牌被带到别的目标。
  *
  * @param session - 主进程默认 session（出站请求拦截）。
@@ -41,7 +78,7 @@ export interface DesktopSession {
  * @param token - 访问令牌。
  */
 export function installDesktopAuth(session: DesktopSession, origin: string, rendererPath: string, token: string): void {
-  const renderer = pathToFileURL(rendererPath).href;
+  const rendererKey = fileKey(rendererPath);
   session.webRequest.onBeforeSendHeaders((details, callback) => {
     const headers = { ...details.requestHeaders };
     // 重定向后的请求不得把凭证带去别的目标。
@@ -59,7 +96,7 @@ export function installDesktopAuth(session: DesktopSession, origin: string, rend
         frame?.parent === null &&
         page?.protocol === 'file:' &&
         page.origin === 'null' &&
-        page.href.split(/[?#]/, 1)[0] === renderer
+        fileKey(pathFromFileUrl(page.href)) === rendererKey
       ) {
         headers['X-Taoxi-Pet-Token'] = token;
       }

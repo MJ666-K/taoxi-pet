@@ -1,9 +1,9 @@
 import { __commonJS, __export, __toESM } from "./chunk-BI7llAj_.js";
 import { APIConnectionError, APIConnectionTimeoutError, APIError, APIUserAbortError, AnthropicError, AuthenticationError, BadRequestError, ConflictError, InternalServerError, NotFoundError, PermissionDeniedError, RateLimitError, RetryableError, ToolError, UnprocessableEntityError, __classPrivateFieldGet, __classPrivateFieldSet, applyJitter, backoff, castToError, checkMemorySyncInterval, checkNever, concatBytes, debugLogRequestDetails, decodeUTF8, defaultLogLevel, defaultLogger, encodeUTF8, isAbortError, isAbsoluteURL, isArray, isEmptyObj, isFatal4xx, isObj, isReadonlyArray, isStatus, jitter, loggerFor, maybeObj, parseLogLevel, promiseWithResolvers, readEnv, safeJSON, validatePositiveInteger } from "./promise-w1vDKNjV.js";
 import { createRequire } from "node:module";
-import { dirname, join, normalize, resolve, sep } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { appendFileSync, chmodSync, closeSync, constants, createReadStream, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, normalize, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+import { appendFileSync, chmodSync, closeSync, constants, createReadStream, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { execFileSync, spawn } from "node:child_process";
 import { homedir } from "node:os";
@@ -18255,18 +18255,18 @@ function getName$1(value, options) {
 	if (typeof value !== "object" || value === null) return void 0;
 	const name = "name" in value ? value.name : void 0;
 	const explicitName = name && String(name) || "filename" in value && value.filename && String(value.filename);
-	if (explicitName) return options?.stripFilename === false ? normalizeFilenamePath(explicitName) : basename(explicitName);
+	if (explicitName) return options?.stripFilename === false ? normalizeFilenamePath(explicitName) : basename$1(explicitName);
 	const url = "url" in value && value.url && String(value.url);
 	if (url) try {
-		const filename = basename(new URL(url).pathname);
-		return filename === void 0 ? void 0 : basename(decodeURLFilename(filename));
+		const filename = basename$1(new URL(url).pathname);
+		return filename === void 0 ? void 0 : basename$1(decodeURLFilename(filename));
 	} catch {
-		return basename(url);
+		return basename$1(url);
 	}
 	const path$2 = "path" in value && value.path && String(value.path);
-	return path$2 ? basename(path$2) : void 0;
+	return path$2 ? basename$1(path$2) : void 0;
 }
-function basename(value) {
+function basename$1(value) {
 	return value.split(/[\\/]/).pop() || void 0;
 }
 function decodeURLFilename(filename) {
@@ -18418,7 +18418,7 @@ function getStreamingFileName(value, options) {
 	if (isStreamingFile(value)) {
 		const { name } = value;
 		if (typeof name !== "string" || !name) throw new TypeError("Streaming upload file name must be a non-empty string");
-		return options.stripFilenames === false ? normalizeFilenamePath(name) : basename(name) ?? "unknown_file";
+		return options.stripFilenames === false ? normalizeFilenamePath(name) : basename$1(name) ?? "unknown_file";
 	}
 	return getName$1(value, { stripFilename: options.stripFilenames }) ?? "unknown_file";
 }
@@ -60626,8 +60626,39 @@ function createStandaloneContext(options) {
 
 //#endregion
 //#region src/app/desktop-auth.ts
+/**
+* 把本地路径收成可比对的键。
+*
+* 打包后的 exe 会解压到每台电脑自己的临时目录。窗口地址和主进程路径经常只在盘符大小写、
+* 百分号编码或 8.3 短名上不同；按 file 地址原文比对会漏加令牌，配置请求就被 403。
+* asar 内部路径对 realpath 不可见，就落到最近一层真实目录上再把余下的相对路径接回去。
+*/
+function fileKey(filePath) {
+	const resolved = resolve(filePath);
+	const tail = [];
+	let cursor = resolved;
+	let canonical = resolved;
+	while (true) try {
+		canonical = tail.reduceRight((dir, name) => resolve(dir, name), realpathSync.native(cursor));
+		break;
+	} catch {
+		const parent = dirname(cursor);
+		if (parent === cursor) break;
+		tail.push(basename(cursor));
+		cursor = parent;
+	}
+	return process.platform === "win32" ? canonical.toLowerCase() : canonical;
+}
+/** 去掉查询串和片段后再还原成本地路径。fileURLToPath 拒绝带 search/hash 的地址。 */
+function pathFromFileUrl(href) {
+	const url = new URL(href);
+	if (url.protocol !== "file:") throw new Error("not a file url");
+	url.search = "";
+	url.hash = "";
+	return fileURLToPath(url);
+}
 function installDesktopAuth(session$1, origin, rendererPath, token) {
-	const renderer = pathToFileURL(rendererPath).href;
+	const rendererKey = fileKey(rendererPath);
 	session$1.webRequest.onBeforeSendHeaders((details, callback) => {
 		const headers = { ...details.requestHeaders };
 		for (const name of Object.keys(headers)) {
@@ -60638,7 +60669,7 @@ function installDesktopAuth(session$1, origin, rendererPath, token) {
 			const target = new URL(details.url);
 			const frame = details.frame;
 			const page = frame ? new URL(frame.url) : void 0;
-			if (target.origin === origin && target.pathname.startsWith(ROUTE_SEGMENT + "/") && frame?.parent === null && page?.protocol === "file:" && page.origin === "null" && page.href.split(/[?#]/, 1)[0] === renderer) headers["X-Taoxi-Pet-Token"] = token;
+			if (target.origin === origin && target.pathname.startsWith(ROUTE_SEGMENT + "/") && frame?.parent === null && page?.protocol === "file:" && page.origin === "null" && fileKey(pathFromFileUrl(page.href)) === rendererKey) headers["X-Taoxi-Pet-Token"] = token;
 		} catch {}
 		callback({ requestHeaders: headers });
 	});
