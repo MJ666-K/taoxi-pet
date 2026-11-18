@@ -60661,15 +60661,20 @@ function installDesktopAuth(session$1, origin, rendererPath, token) {
 	const rendererKey = fileKey(rendererPath);
 	session$1.webRequest.onBeforeSendHeaders((details, callback) => {
 		const headers = { ...details.requestHeaders };
-		for (const name of Object.keys(headers)) {
-			const lower = name.toLowerCase();
-			if (lower === "x-taoxi-pet-token" || lower === "x-dsh-pet-token") delete headers[name];
-		}
 		try {
-			const target = new URL(details.url);
 			const frame = details.frame;
 			const page = frame ? new URL(frame.url) : void 0;
-			if (target.origin === origin && target.pathname.startsWith(ROUTE_SEGMENT + "/") && frame?.parent === null && page?.protocol === "file:" && page.origin === "null" && fileKey(pathFromFileUrl(page.href)) === rendererKey) headers["X-Taoxi-Pet-Token"] = token;
+			const isPetRenderer = frame?.parent === null && page?.protocol === "file:" && page.origin === "null" && fileKey(pathFromFileUrl(page.href)) === rendererKey;
+			if (!isPetRenderer) {
+				callback({ requestHeaders: headers });
+				return;
+			}
+			for (const name of Object.keys(headers)) {
+				const lower = name.toLowerCase();
+				if (lower === "x-taoxi-pet-token" || lower === "x-dsh-pet-token") delete headers[name];
+			}
+			const target = new URL(details.url);
+			if (target.origin === origin && target.pathname.startsWith(ROUTE_SEGMENT + "/")) headers["X-Taoxi-Pet-Token"] = token;
 		} catch {}
 		callback({ requestHeaders: headers });
 	});

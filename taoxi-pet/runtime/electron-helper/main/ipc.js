@@ -1,6 +1,7 @@
 'use strict';
 const { BrowserWindow, desktopCapturer, screen } = require('electron');
 const { decideWindowIgnore } = require('../pointer-target.js');
+const { openSettingsWindow } = require('./settings-window.js');
 /**
  * 渲染端到主进程的 ipc：窗口跟随、飞行状态、碰撞转发、穿透翻转、输入租约与菜单首项（打开软件 / 打开 AI 设置）。
  *
@@ -14,7 +15,7 @@ const { decideWindowIgnore } = require('../pointer-target.js');
  * @param deps.ipcMain - Electron ipcMain。
  * @param deps.petWindows - 窗口能力（state 与方法）。
  * @param deps.shell - Electron shell（打开站点）。
- * @param deps.openTarget - 菜单首项的去向：desktop 唤起桌面应用；其余形态交给默认浏览器打开已鉴权地址。
+ * @param deps.openTarget - 菜单首项的去向：desktop 唤起桌面应用；standalone 开应用内设置窗；web 交给默认浏览器。
  * @param deps.petRoute - 宠物路由前缀。
  */
 function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute }) {
@@ -130,12 +131,11 @@ function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute }) {
     win.webContents.focus();
   });
 
-  // 右键菜单首项（打开软件 / 打开 AI 设置 / 打开网站）：交给系统默认浏览器（等效网页里 Ctrl+点击链接），不建专属窗口——
-  // 宠物窗口是透明小窗，不该承载常规网页浏览。URL 由渲染端从 configUrl 推导。
-  const openSite = (url) => {
-    // 宿主注入的已鉴权站点 URL（含本进程启动令牌）：DSH 只在 GET / 接受它并换发浏览器 Cookie，
-    // 裸 origin 在默认浏览器里必然 401。令牌等价登录态，只在与目标同 origin 时启用，
-    // 绝不让它被带去别的站点；取不到该变量时行为与以前一致。
+  // 右键菜单首项（打开软件 / 打开 AI 设置 / 打开网站）。
+  // standalone：应用内开设置窗，不依赖系统浏览器与代理；web：仍走默认浏览器。
+  // URL 由渲染端从 configUrl 推导。
+  const resolveAuthedUrl = (url) => {
+    // 宿主注入的已鉴权站点 URL（含本进程启动令牌）。令牌等价登录态，只在与目标同 origin 时启用。
     let target = url;
     const authed = process.env.DSH_PET_SITE_URL || '';
     if (/^https?:[/][/]/.test(authed)) {
@@ -144,6 +144,14 @@ function registerIpc({ ipcMain, petWindows, shell, openTarget, petRoute }) {
       } catch {
         /* 形状不对：保持裸地址（原行为） */
       }
+    }
+    return target;
+  };
+  const openSite = (url) => {
+    const target = resolveAuthedUrl(url);
+    if (openTarget === 'standalone') {
+      openSettingsWindow(target);
+      return;
     }
     shell.openExternal(target).catch((error) => {
       console.error('[taoxi-pet-desktop-helper] openExternal failed:', error);

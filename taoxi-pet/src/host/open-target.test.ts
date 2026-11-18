@@ -90,8 +90,12 @@ describe('装配接线：宿主注入 → helper 解析 → 渲染端文案', ()
       'dsh:// 失败要回落成打开站点（协议未注册时不能"点了没反应"）',
     );
     assert.ok(
+      /openTarget === 'standalone'[\s\S]*?openSettingsWindow\(target\)/.test(main),
+      '独立模式必须开应用内设置窗，不依赖系统默认浏览器',
+    );
+    assert.ok(
       /const openSite = \(url\) => \{[\s\S]*?shell\.openExternal\(target\)/.test(main),
-      'site 路径（含回落）必须仍是原来那条打开站点的实现',
+      'web 路径（含 desktop 回落）必须仍能走系统默认浏览器',
     );
     assert.ok(
       (main.match(/dsh:\/\/open/g) ?? []).length === 1,

@@ -81,27 +81,31 @@ export function installDesktopAuth(session: DesktopSession, origin: string, rend
   const rendererKey = fileKey(rendererPath);
   session.webRequest.onBeforeSendHeaders((details, callback) => {
     const headers = { ...details.requestHeaders };
-    // 重定向后的请求不得把凭证带去别的目标。
-    for (const name of Object.keys(headers)) {
-      const lower = name.toLowerCase();
-      if (lower === 'x-taoxi-pet-token' || lower === 'x-dsh-pet-token') delete headers[name];
-    }
     try {
-      const target = new URL(details.url);
       const frame = details.frame;
       const page = frame ? new URL(frame.url) : undefined;
-      if (
-        target.origin === origin &&
-        target.pathname.startsWith(ROUTE_SEGMENT + '/') &&
+      // 只动桌宠 file 渲染页：清掉自带头再按需注入。应用内设置窗是 http 同源页，
+      // 自己从 #token= 带头；若这里一律剥离，设置接口会全部 403。
+      const isPetRenderer =
         frame?.parent === null &&
         page?.protocol === 'file:' &&
         page.origin === 'null' &&
-        fileKey(pathFromFileUrl(page.href)) === rendererKey
-      ) {
+        fileKey(pathFromFileUrl(page.href)) === rendererKey;
+      if (!isPetRenderer) {
+        callback({ requestHeaders: headers });
+        return;
+      }
+      // 重定向或非法目标都不得把凭证带出去：先剥，再仅对插件路由注入。
+      for (const name of Object.keys(headers)) {
+        const lower = name.toLowerCase();
+        if (lower === 'x-taoxi-pet-token' || lower === 'x-dsh-pet-token') delete headers[name];
+      }
+      const target = new URL(details.url);
+      if (target.origin === origin && target.pathname.startsWith(ROUTE_SEGMENT + '/')) {
         headers['X-Taoxi-Pet-Token'] = token;
       }
     } catch {
-      // frame 缺失/已销毁或地址非法时，一律不授予凭证。
+      // frame 缺失/已销毁或目标地址非法时，一律不授予凭证（桌宠页已剥头）。
     }
     callback({ requestHeaders: headers });
   });
